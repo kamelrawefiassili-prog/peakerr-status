@@ -1,14 +1,16 @@
 {
-  "name": "peakerr-status",
+  "name": "peaker-proxy",
   "version": "1.0.0",
+  "description": "Tiny proxy to call Peaker API safely",
   "main": "index.js",
-  "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2",
-    "cors": "^2.8.5"
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "morgan": "^1.10.0"
   }
 }
