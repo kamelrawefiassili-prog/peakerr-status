@@ -1,55 +1,58 @@
-import express from "express";
-import fetch from "node-fetch";
-import cors from "cors";
+const express = require('express');
+const axios = require('axios');
+const morgan = require('morgan');
+const cors = require('cors');
 
 const app = express();
-app.use(cors());
+
+// middlewares
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(morgan('tiny'));
 
-app.get("/", (req, res) => {
-  res.send("✅ Peakerr Status API is running!");
+// ⚠️ إن كنت ستستدعيه من المتصفح مباشرة، قيّد origin بدل *
+app.use(cors({ origin: '*' }));
+
+// إعدادات
+const API_URL = process.env.PEEKER_API_URL || 'https://peaker.com/api/v2';
+const API_KEY = process.env.PEEKER_API_KEY; // ضعه في Render كـ env var
+
+app.get('/', (_, res) => {
+  res.json({ ok: true, service: 'peaker-proxy', routes: ['/order'] });
 });
 
-// 🔹 عرض جميع الطلبات
-app.get("/orders", async (req, res) => {
+// نقطة طلب الحالة
+app.post('/order', async (req, res) => {
   try {
-    const response = await fetch("https://peakerr.com/api/v2", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        key: process.env.PEAKERR_API_KEY,
-        action: "orders"   // ✅ مهم جداً
-      })
+    const action = (req.body?.action || 'status').toString();
+    const order = (req.body?.order || '').toString().trim();
+
+    if (!order) {
+      return res.status(400).json({ error: 'order_required' });
+    }
+    if (!API_KEY) {
+      return res.status(500).json({ error: 'server_misconfigured', detail: 'PEEKER_API_KEY missing' });
+    }
+
+    // نبني بيانات x-www-form-urlencoded كما يتوقع Peaker
+    const payload = new URLSearchParams();
+    payload.append('key', API_KEY);
+    payload.append('action', action);
+    payload.append('order', order);
+
+    const upstream = await axios.post(API_URL, payload.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: 15000
     });
 
-    const data = await response.json();
-    res.json(data);
-
+    res.json(upstream.data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    const status = err.response?.status || 502;
+    const detail = err.response?.data || err.message;
+    res.status(status).json({ error: 'upstream_error', detail });
   }
 });
 
-// 🔹 عرض حالة طلب واحد
-app.get("/status/:orderId", async (req, res) => {
-  try {
-    const response = await fetch("https://peakerr.com/api/v2", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        key: process.env.PEAKERR_API_KEY,
-        action: "status",   // ✅ أمر الحالة
-        order: req.params.orderId
-      })
-    });
-
-    const data = await response.json();
-    res.json(data);
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Status API running on ${PORT}`));
+// تشغيل السيرفر
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`Proxy running on :${PORT}`));
